@@ -19,11 +19,12 @@ use actix_web::{
     App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 use askama::{Html as AskamaHtml, MarkupDisplay, Template};
+use futures::SinkExt;
+use io::get_pastes;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use std::{
-    borrow::Cow,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    borrow::Cow, fmt::format, net::{IpAddr, Ipv4Addr, SocketAddr}
 };
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
 
@@ -69,6 +70,7 @@ async fn main() -> std::io::Result<()> {
                 .route("/", web::put().to(submit_raw))
                 .route("/", web::head().to(HttpResponse::MethodNotAllowed))
                 .route("/highlight.css", web::get().to(highlight_css))
+                .route("/pastes", web::get().to(show_pastes))
                 .route("/{paste}", web::get().to(show_paste))
                 .route("/{paste}", web::head().to(HttpResponse::MethodNotAllowed))
                 .default_service(web::to(|req: HttpRequest| async move {
@@ -128,6 +130,13 @@ struct ShowPaste<'a> {
     content: MarkupDisplay<AskamaHtml, Cow<'a, String>>,
 }
 
+
+#[derive(Template)]
+#[template(path = "pastes.html")]
+struct ShowPastes<'a> {
+    content: MarkupDisplay<AskamaHtml, Cow<'a, String>>
+}
+
 async fn show_paste(
     req: HttpRequest,
     key: actix_web::web::Path<String>,
@@ -165,6 +174,17 @@ async fn show_paste(
 
         render_template(&req, &ShowPaste { content })
     }
+}
+
+
+async fn show_pastes(req: HttpRequest, store: Data<PasteStore>) -> Result<HttpResponse, Error> {
+    let links: Vec<String> = get_pastes(&store).into_iter().map(|p| format!("<li><a href=\"/{}\">{}</a></li>", p, p)).collect();
+    let html = format!(
+        "<ul>{}</ul>",
+        links.join("\n")
+    );
+    let content = MarkupDisplay::new_safe(Cow::Borrowed(&html), AskamaHtml);
+    render_template(&req, &ShowPastes { content })
 }
 
 async fn highlight_css() -> HttpResponse {

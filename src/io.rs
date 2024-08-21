@@ -52,3 +52,7 @@ pub fn get_paste(entries: &PasteStore, id: &str) -> Option<Bytes> {
     // need to box the guard until owning_ref understands Pin is a stable address
     entries.read().get(id).map(Bytes::clone)
 }
+
+pub fn get_pastes(entries: &PasteStore) -> Vec<String> {
+    return entries.read().keys().cloned().collect()
+}
