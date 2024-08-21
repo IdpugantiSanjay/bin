@@ -58,3 +58,9 @@ hello world
 ##### how does syntax highlighting work?
 
 To get syntax highlighting you need to add the file extension at the end of your paste URL.
+
+
+##### TODO:
+
+1. Allow option to specify key name in POST request.
+2. Serialize LinkedHashMap to a file and read from that file when application is started

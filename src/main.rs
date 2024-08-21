@@ -178,7 +178,7 @@ async fn show_paste(
 
 
 async fn show_pastes(req: HttpRequest, store: Data<PasteStore>) -> Result<HttpResponse, Error> {
-    let links: Vec<String> = get_pastes(&store).into_iter().map(|p| format!("<li><a href=\"/{}\">{}</a></li>", p, p)).collect();
+    let links: Vec<String> = get_pastes(&store).into_iter().map(|p| format!("<li><a href=\"/{}.md\">{}</a></li>", p, p)).collect();
     let html = format!(
         "<ul>{}</ul>",
         links.join("\n")
