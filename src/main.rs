@@ -19,14 +19,14 @@ use actix_web::{
     App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 use askama::{Html as AskamaHtml, MarkupDisplay, Template};
-use futures::SinkExt;
 use io::get_pastes;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use std::{
-    borrow::Cow, fmt::format, net::{IpAddr, Ipv4Addr, SocketAddr}
+    borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path
 };
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
+use crate::io::SerializableStore;
 
 #[derive(argh::FromArgs, Clone)]
 /// a pastebin.
@@ -43,6 +43,9 @@ pub struct BinArgs {
     /// maximum paste size in bytes (default. 32kB)
     #[argh(option, default = "32 * 1024")]
     max_paste_size: usize,
+    /// file path to store pastes (default. store.json)
+    #[argh(option, default = "\"./store.json\".to_string()")]
+    store_path: String
 }
 
 #[actix_web::main]
@@ -54,7 +57,14 @@ async fn main() -> std::io::Result<()> {
 
     let args: BinArgs = argh::from_env();
 
-    let store = Data::new(PasteStore::default());
+    // deserialize from path
+    let mut store = Data::new(PasteStore::default());
+    let store_path = Path::new(&args.store_path);
+    if store_path.exists() {
+        let serializable_store = SerializableStore::from_file(&args.store_path);
+        store = Data::new(serializable_store?.to_paste_store());
+    }
+
 
     let server = HttpServer::new({
         let args = args.clone();
