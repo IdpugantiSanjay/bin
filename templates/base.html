@@ -10,11 +10,12 @@
         html, body { margin: 0; }
         body {
             height: 100vh;
-            padding: 2rem;
+            padding: 2.5rem;
             background: #263238;
             color: #B0BEC5;
             line-height: 1.4;
             display: flex;
+            flex-direction: column;
         }
         body, code, textarea { font-family: monospace; }
         code {
@@ -23,9 +24,29 @@
         a {
             color: #98c379;
         }
+
+        .navigation {
+            display: flex;
+            position: absolute;
+            right: 2rem;
+            top: 1rem;
+            font-size: 1rem;
+            gap: 1rem;
+        }
         {% block styles %}{% endblock styles %}
     </style>
     {% block head %}{% endblock head %}
 </head>
-<body>{% block content %}{% endblock content %}</body>
+<body>
+
+{% block navigation %}
+<div class="navigation">
+    <a href="/">New</a>
+    <a href="/pastes">Saved Pastes</a>
+</div>
+{% endblock navigation %}
+
+{% block content %}
+{% endblock content %}
+</body>
 </html>

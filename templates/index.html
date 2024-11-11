@@ -52,6 +52,16 @@
         const form = document.querySelector('form');
         const input = document.querySelector('textarea');
         const button = document.querySelector('button[type="submit"]');
+        let isTouchDevice = false;
+
+        const askConfirmation = (event) => {
+            if (input.value && !isTouchDevice) {
+                event.preventDefault();
+                event.returnValue = "";
+                return ''
+            }
+            return false;
+        }
 
         const onInput = () => button.classList.toggle('hidden', !input.value);
         input.addEventListener('input', onInput);
@@ -59,8 +69,16 @@
 
         document.body.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.altKey)) {
+                window.removeEventListener("beforeunload", askConfirmation)
                 form.submit();
             }
         });
+
+        form.onsubmit = (e) => {
+            window.removeEventListener("beforeunload", askConfirmation)
+        }
+
+        window.addEventListener("beforeunload", askConfirmation);
+        window.addEventListener("touchstart", () => isTouchDevice = true);
     </script>
 {% endblock content %}

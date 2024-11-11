@@ -62,5 +62,7 @@ To get syntax highlighting you need to add the file extension at the end of your
 
 ##### TODO:
 
-1. Allow option to specify key name in POST request.
-2. Serialize LinkedHashMap to a file and read from that file when application is started
+- [ ] Allow option to specify key name in POST request.
+- [x] Serialize LinkedHashMap to a file and read from that file when application is started
+- [ ] navigation: easily goto Pastes path and from Pastes goto New Paste
+- [ ] in pastes path. User should be able to delete a paste

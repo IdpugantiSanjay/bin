@@ -9,7 +9,6 @@ mod params;
 use crate::{
     errors::{InternalServerError, NotFound},
     highlight::highlight,
-    io::{generate_id, get_paste, store_paste, PasteStore},
     params::{HostHeader, IsPlaintextRequest},
 };
 
@@ -19,14 +18,18 @@ use actix_web::{
     App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 use askama::{Html as AskamaHtml, MarkupDisplay, Template};
-use io::get_pastes;
+use io::{generate_id, Store};
 use log::{error, info};
 use once_cell::sync::Lazy;
+use sqlx::SqlitePool;
+use core::str;
 use std::{
-    borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path
+    borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path,
 };
+use actix_web::web::{redirect, Redirect};
+use argh::FlagInfoKind::Option;
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
-use crate::io::SerializableStore;
+// use crate::io::{delete_paste, update_paste, SerializableStore};
 
 #[derive(argh::FromArgs, Clone)]
 /// a pastebin.
@@ -38,40 +41,36 @@ pub struct BinArgs {
     )]
     bind_addr: SocketAddr,
     /// maximum amount of pastes to store before rotating (default: 1000)
-    #[argh(option, default = "1000")]
-    buffer_size: usize,
     /// maximum paste size in bytes (default. 32kB)
     #[argh(option, default = "32 * 1024")]
     max_paste_size: usize,
     /// file path to store pastes (default. store.json)
-    #[argh(option, default = "\"./store.json\".to_string()")]
-    store_path: String
+    #[argh(option, default = "\"./store.db\".to_string()")]
+    store_path: String,
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "INFO");
+        std::env::set_var("RUST_LOG", "DEBUG");
     }
     pretty_env_logger::init();
 
     let args: BinArgs = argh::from_env();
 
-    // deserialize from path
-    let mut store = Data::new(PasteStore::default());
-    let store_path = Path::new(&args.store_path);
-    if store_path.exists() {
-        let serializable_store = SerializableStore::from_file(&args.store_path);
-        store = Data::new(serializable_store?.to_paste_store());
-    }
+    let database_url = format!("sqlite://{}", args.store_path);
+    let pool = SqlitePool::connect(database_url.as_str())
+        .await
+        .expect("Failed to create SQLite pool.");
 
+    let store: Store = Store::new(pool);
 
     let server = HttpServer::new({
         let args = args.clone();
 
         move || {
             App::new()
-                .app_data(store.clone())
+                .app_data(Data::new(store.clone()))
                 .app_data(PayloadConfig::default().limit(args.max_paste_size))
                 .app_data(FormConfig::default().limit(args.max_paste_size))
                 .wrap(actix_web::middleware::Compress::default())
@@ -82,6 +81,9 @@ async fn main() -> std::io::Result<()> {
                 .route("/highlight.css", web::get().to(highlight_css))
                 .route("/pastes", web::get().to(show_pastes))
                 .route("/{paste}", web::get().to(show_paste))
+                .route("/remove_paste/{paste}", web::post().to(remove_paste))
+                .route("/edit/{paste}", web::get().to(edit_paste))
+                .route("/edit/{paste}", web::post().to(update_paste_content))
                 .route("/{paste}", web::head().to(HttpResponse::MethodNotAllowed))
                 .default_service(web::to(|req: HttpRequest| async move {
                     error!("Couldn't find resource {}", req.uri());
@@ -108,10 +110,15 @@ struct IndexForm {
     val: Bytes,
 }
 
-async fn submit(input: web::Form<IndexForm>, store: Data<PasteStore>) -> impl Responder {
+async fn submit(input: web::Form<IndexForm>, store: Data<Store>) -> impl Responder {
     let id = generate_id();
     let uri = format!("/{id}");
-    store_paste(&store, id, input.into_inner().val);
+
+    let result = store.insert(&id, str::from_utf8(&input.into_inner().val).unwrap()).await;
+    if result.is_err() {
+        return HttpResponse::InternalServerError().into();
+    }
+    
     HttpResponse::Found()
         .append_header((header::LOCATION, uri))
         .finish()
@@ -120,7 +127,7 @@ async fn submit(input: web::Form<IndexForm>, store: Data<PasteStore>) -> impl Re
 async fn submit_raw(
     data: Bytes,
     host: HostHeader,
-    store: Data<PasteStore>,
+    store: Data<Store>,
 ) -> Result<String, Error> {
     let id = generate_id();
     let uri = if let Some(Ok(host)) = host.0.as_ref().map(|v| std::str::from_utf8(v.as_bytes())) {
@@ -129,66 +136,145 @@ async fn submit_raw(
         format!("/{id}\n")
     };
 
-    store_paste(&store, id, data);
+    let result = store.insert(&id, str::from_utf8(&data).unwrap()).await;
 
-    Ok(uri)
+    match result {
+        Ok(_) => Ok(uri),
+        Err(err) => Err(actix_web::error::ErrorInternalServerError(err)),
+    }
 }
 
 #[derive(Template)]
 #[template(path = "paste.html")]
 struct ShowPaste<'a> {
     content: MarkupDisplay<AskamaHtml, Cow<'a, String>>,
+    paste: String
 }
 
 
 #[derive(Template)]
 #[template(path = "pastes.html")]
 struct ShowPastes<'a> {
-    content: MarkupDisplay<AskamaHtml, Cow<'a, String>>
+    content: MarkupDisplay<AskamaHtml, Cow<'a, String>>,
+}
+
+#[derive(Template)]
+#[template(path = "edit.html")]
+struct EditPaste<'a> {
+    paste: &'a str,
+    content: MarkupDisplay<AskamaHtml, Cow<'a, String>>,
+}
+
+async fn remove_paste(req: HttpRequest,
+                      key: actix_web::web::Path<String>, store: Data<Store>) -> Result<HttpResponse, Error> {
+    let mut splitter = key.splitn(2, '.');
+    let key = splitter.next().unwrap();
+    let _ = splitter.next();
+
+    let result = store.delete_paste_by_title(&key).await;
+
+    match result {
+        Ok(_) => {
+            return Ok(HttpResponse::Found()
+                .append_header(("LOCATION", "/pastes"))
+                .finish());
+        }
+        Err(_) => {
+            return Ok(HttpResponse::NotFound().into());
+        }
+    }
 }
 
 async fn show_paste(
     req: HttpRequest,
     key: actix_web::web::Path<String>,
     plaintext: IsPlaintextRequest,
-    store: Data<PasteStore>,
+    store: Data<Store>,
 ) -> Result<HttpResponse, Error> {
     let mut splitter = key.splitn(2, '.');
     let key = splitter.next().unwrap();
     let ext = splitter.next();
 
-    let entry = get_paste(&store, key).ok_or(NotFound)?;
+    info!("Fetching paste with id {}", key);
+    let entry = store.get_paste_by_title(&key).await;
 
-    if *plaintext {
-        Ok(HttpResponse::Ok()
-            .content_type("text/plain; charset=utf-8")
-            .body(entry))
-    } else {
-        let data = std::str::from_utf8(entry.as_ref())?;
+    let response = match entry {
+        Ok(entry) => {
+            if *plaintext {
+                Ok(HttpResponse::Ok()
+                    .content_type("text/plain; charset=utf-8")
+                    .body(entry.content))
+            } else {
+                let code_highlighted = match ext {
+                    Some(extension) => match highlight(&entry.content, extension) {
+                        Some(html) => html,
+                        None => return Err(NotFound.into()),
+                    },
+                    None => htmlescape::encode_minimal(&entry.content),
+                };
+        
+                // Add <code> tags to enable line numbering with CSS
+                let html = format!(
+                    "<code>{}</code>",
+                    code_highlighted.replace('\n', "</code><code>")
+                );
+        
+                let content = MarkupDisplay::new_safe(Cow::Borrowed(&html), AskamaHtml);
+        
+                render_template(&req, &ShowPaste { content, paste: key.to_string() })
+            }
+        },
+        Err(_) => return Ok(HttpResponse::InternalServerError().into()),
+    };
+    response
+}
 
-        let code_highlighted = match ext {
-            Some(extension) => match highlight(data, extension) {
-                Some(html) => html,
-                None => return Err(NotFound.into()),
-            },
-            None => htmlescape::encode_minimal(data),
-        };
+async fn edit_paste(req: HttpRequest, key: actix_web::web::Path<String>, store: Data<Store>) -> Result<HttpResponse, Error> {
+    let mut splitter = key.splitn(2, '.');
+    let paste_id = splitter.next().unwrap();
 
-        // Add <code> tags to enable line numbering with CSS
-        let html = format!(
-            "<code>{}</code>",
-            code_highlighted.replace('\n', "</code><code>")
-        );
+    let paste = store.get_paste_by_title(&key).await;
 
-        let content = MarkupDisplay::new_safe(Cow::Borrowed(&html), AskamaHtml);
+    let response = match paste {
+        Ok(paste) => {
+            let content = MarkupDisplay::new_safe(Cow::Borrowed(&paste.content), AskamaHtml);
+            render_template(&req, &EditPaste { paste: paste_id, content })
+        },
+        Err(_) => return Ok(HttpResponse::NotFound().into()),
+    };
+    response
+}
 
-        render_template(&req, &ShowPaste { content })
+async fn update_paste_content(req: HttpRequest, key: actix_web::web::Path<String>, input: web::Form<IndexForm>, store: Data<Store>) -> impl Responder {
+    let mut splitter = key.splitn(2, '.');
+    let paste = splitter.next().unwrap();
+    let uri = format!("/{paste}");
+
+
+    let result = store.update_paste_content(&paste, str::from_utf8(&input.into_inner().val).unwrap()).await;
+
+    match result {
+        Ok(_) => {
+            return Ok::<HttpResponse, Error>(HttpResponse::Found()
+                .append_header(("LOCATION", uri))
+                .finish());
+        }
+        Err(_) => {
+            return Ok(HttpResponse::NotFound().into());
+        }
     }
 }
 
+async fn show_pastes(req: HttpRequest, store: Data<Store>) -> Result<HttpResponse, Error> {
+    let result = store.get_all_pastes().await;
+    if result.is_err() {
+        return Ok(HttpResponse::InternalServerError().into());
+    }
 
-async fn show_pastes(req: HttpRequest, store: Data<PasteStore>) -> Result<HttpResponse, Error> {
-    let links: Vec<String> = get_pastes(&store).into_iter().map(|p| format!("<li><a href=\"/{}.md\">{}</a></li>", p, p)).collect();
+    let links: Vec<String> = result.unwrap().into_iter().map(|p| format!(
+        "<li><form action=\"/remove_paste/{}\" method=\"POST\"><a href=\"/{}.md\">{}</a><button type=\"submit\" title=\"Delete {}\">&#x274C;</button><button type=\"button\" title=\"Edit {}\"><a href=\"/edit/{}\">✏️</a></button></form></li>", 
+        p.title, p.title, p.title, p.title, p.title, p.title)).collect();
+
     let html = format!(
         "<ul>{}</ul>",
         links.join("\n")

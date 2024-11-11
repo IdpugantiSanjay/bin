@@ -29,4 +29,14 @@
     <link rel="stylesheet" type="text/css" href="highlight.css" />
 {% endblock head %}
 
-{% block content %}<pre>{{ content|safe }}</pre>{% endblock content %}
+{% block navigation %}
+<div class="navigation">
+    <a href="/edit/{{ paste }}">Edit</a>
+    <a href="/">New</a>
+    <a href="/pastes">Saved Pastes</a>
+</div>
+{% endblock navigation %}
+
+{% block content %}
+<pre>{{ content|safe }}</pre>
+{% endblock content %}

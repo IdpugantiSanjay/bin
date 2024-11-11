@@ -1,80 +1,78 @@
-use actix_web::web::Bytes;
-use linked_hash_map::LinkedHashMap;
-use once_cell::sync::Lazy;
-use parking_lot::RwLock;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, fs, fs::File, io::Write};
+use std::cell::RefCell;
+use sqlx::{prelude::FromRow, sqlite::SqlitePool};
 
-pub type PasteStore = RwLock<LinkedHashMap<String, Bytes>>;
-
-
-#[derive(Serialize, Deserialize)]
-pub struct SerializableStore(Vec<(String, Vec<u8>)>);
-
-impl SerializableStore {
-    fn save_to_file(&self, filename: &str) -> std::io::Result<()> {
-        // Serialize the struct to a JSON string
-        let serialized = serde_json::to_string(self)?;
-        // Open the file in write mode
-        let mut file = File::create(filename)?;
-        // Write the serialized data to the file
-        match file.write_all(serialized.as_bytes()) {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                println!("{}", err);
-                Ok(())
-            }
-        }
-    }
-
-    pub fn from_file(filename: &str) -> std::io::Result<SerializableStore> {
-        let json = fs::read_to_string(filename)?;
-        let store: SerializableStore = serde_json::from_str(&json)?;
-        Ok(store)
-    }
-
-    pub fn to_paste_store(&self) -> PasteStore {
-        let map: LinkedHashMap<String, Bytes> = self.0.iter()
-            .map(|(key, value)| (key.clone(), Bytes::from(value.clone())))
-            .collect();
-        RwLock::new(map)
-    }
+#[derive(Debug, FromRow)]
+pub struct Paste {
+    pub title: String,
+    pub content: String,
+    pub id: u8,
 }
 
 
-impl From<LinkedHashMap<String, Bytes>> for SerializableStore {
-    fn from(map: LinkedHashMap<String, Bytes>) -> Self {
-        SerializableStore(
-            map.into_iter()
-                .map(|(k, v)| (k, v.to_vec()))
-                .collect()
-        )
+#[derive(Clone)]
+pub struct Store(SqlitePool);
+
+impl Store {
+    pub fn new(pool: SqlitePool) -> Self {
+        Store(pool)
     }
-}
 
-impl Into<LinkedHashMap<String, Bytes>> for SerializableStore {
-    fn into(self) -> LinkedHashMap<String, Bytes> {
-        self.0.into_iter()
-            .map(|(k, v)| (k, Bytes::from(v)))
-            .collect()
+    pub async fn insert(&self, title: &str, content: &str) -> Result<Paste, sqlx::Error> {
+        let paste = sqlx::query_as::<_, Paste>("INSERT INTO pastes (title, content) VALUES (?, ?) RETURNING *")
+            .bind(title)
+            .bind(content)
+            .fetch_one(&self.0)
+            .await?;
+        Ok(paste)
     }
-}
 
-static BUFFER_SIZE: Lazy<usize> = Lazy::new(|| argh::from_env::<crate::BinArgs>().buffer_size);
-static STORE_PATH: Lazy<String> = Lazy::new(|| argh::from_env::<crate::BinArgs>().store_path);
+    pub async fn get_paste_by_id(&self, id: &u8) -> Result<Paste, sqlx::Error> {
+        let paste = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes WHERE id = ?")
+        .bind(id)
+        .fetch_one(&self.0)
+        .await?;
+        Ok(paste)
+    }
 
-/// Ensures `ENTRIES` is less than the size of `BIN_BUFFER_SIZE`. If it isn't then
-/// `ENTRIES.len() - BIN_BUFFER_SIZE` elements will be popped off the front of the map.
-///
-/// During the purge, `ENTRIES` is locked and the current thread will block.
-fn purge_old(entries: &mut LinkedHashMap<String, Bytes>) {
-    if entries.len() > *BUFFER_SIZE {
-        let to_remove = entries.len() - *BUFFER_SIZE;
+    pub async fn get_paste_by_title(&self, title: &str) -> Result<Paste, sqlx::Error> {
+        let paste = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes WHERE title = ?")
+        .bind(title)
+        .fetch_one(&self.0)
+        .await?;
+        Ok(paste)
+    }
 
-        for _ in 0..to_remove {
-            entries.pop_front();
-        }
+    pub async fn delete_paste_by_id(&self, id: &u8) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM pastes WHERE id = ?")
+            .bind(id)
+            .execute(&self.0)
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn delete_paste_by_title(&self, title: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM pastes WHERE title = ?")
+            .bind(title)
+            .execute(&self.0)
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn get_all_pastes(&self) -> Result<Vec<Paste>, sqlx::Error> {
+        let pastes = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes")
+            .fetch_all(&self.0)
+            .await?;
+        Ok(pastes)
+    }
+
+    pub async fn update_paste_content(&self, title: &str, content: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE pastes SET content = ? WHERE title = ?")
+            .bind(content)
+            .bind(title)
+            .execute(&self.0)
+            .await
+            .map(|_| ())
     }
 }
 
@@ -89,36 +87,4 @@ pub fn generate_id() -> String {
             .map(char::from)
             .collect()
     })
-}
-
-/// Stores a paste under the given id
-pub fn store_paste(entries: &PasteStore, id: String, content: Bytes) {
-    {
-        let mut write_entries = entries.write();
-        purge_old(&mut write_entries);
-        write_entries.insert(id, content);
-    }
-
-    let read_entries = entries.read();
-    let store = SerializableStore::from(read_entries.clone());
-    let result = store.save_to_file(&STORE_PATH);
-    match result {
-        Err(err) => {
-            println!("{}", err);
-            panic!()
-        }
-        Ok(()) => ()
-    };
-}
-
-/// Get a paste by id.
-///
-/// Returns `None` if the paste doesn't exist.
-pub fn get_paste(entries: &PasteStore, id: &str) -> Option<Bytes> {
-    // need to box the guard until owning_ref understands Pin is a stable address
-    entries.read().get(id).map(Bytes::clone)
-}
-
-pub fn get_pastes(entries: &PasteStore) -> Vec<String> {
-    entries.read().keys().cloned().collect()
 }

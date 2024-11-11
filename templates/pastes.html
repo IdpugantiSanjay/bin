@@ -1,9 +1,43 @@
 {% extends "base.html" %}
 
 {% block styles %}
+    button {
+        background: none;
+        color: inherit;
+        border: none;
+        padding: 0;
+        font: inherit;
+        cursor: pointer;
+        outline: inherit;
+        margin-left: 0.5rem
+    }
+    .new-paste {
+        position: absolute;
+        right: 2rem;
+        top: 1rem;
+
+    }
 {% endblock styles %}
 
 
-{% block content %}{{ content|safe }}{% endblock content %}
+{% block content %}
+{{ content|safe }}
+
+
+<script>
+    const forms = document.querySelectorAll('form');
+
+    for (const form of forms) {
+        form.addEventListener("submit", (event) => {
+            const paste = event.target.action?.split("/").at(-1)
+            console.warn(`Deleting paste ${paste}`)
+            const sure = confirm(`Are you sure you want to delete ${paste}?`)
+            if (!sure) {
+                event.preventDefault()
+            }
+        })
+    }
+</script>
+{% endblock content %}
 
 
