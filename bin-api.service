@@ -1,0 +1,20 @@
+[Unit]
+Description=Pastebin Service
+After=network.target
+
+[Service]
+ExecStart=/home/sanjay/work/bin/target/release/bin
+WorkingDirectory=/home/sanjay/work/bin/target/release
+Environment=RUST_LOG=info
+Restart=on-failure
+RestartSec=5s
+StartLimitBurst=3
+StartLimitInterval=0
+User=atlas
+Group=atlas
+
+StandardOutput=append:/var/log/bin-api/output.log
+StandardError=append:/var/log/bin-api/error.log
+
+[Install]
+WantedBy=multi-user.target
