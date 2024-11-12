@@ -37,7 +37,7 @@ pub struct BinArgs {
     /// socket address to bind to (default: 127.0.0.1:8820)
     #[argh(
         positional,
-        default = "SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8820)"
+        default = "SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 8820)"
     )]
     bind_addr: SocketAddr,
     /// maximum amount of pastes to store before rotating (default: 1000)
