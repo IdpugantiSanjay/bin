@@ -27,7 +27,6 @@ use std::{
     borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path,
 };
 use actix_web::web::{redirect, Redirect};
-use argh::FlagInfoKind::Option;
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
 // use crate::io::{delete_paste, update_paste, SerializableStore};
 
@@ -40,9 +39,8 @@ pub struct BinArgs {
         default = "SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 8820)"
     )]
     bind_addr: SocketAddr,
-    /// maximum amount of pastes to store before rotating (default: 1000)
-    /// maximum paste size in bytes (default. 32kB)
-    #[argh(option, default = "32 * 1024")]
+    /// maximum paste size in bytes (default. 128kB)
+    #[argh(option, default = "128 * 1024")]
     max_paste_size: usize,
     /// file path to store pastes (default. store.json)
     #[argh(option, default = "\"./store.db\".to_string()")]
