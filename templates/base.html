@@ -1,20 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗑️</text></svg>" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗑️</text></svg>">
     <title>bin.</title>
-    <link rel="help" href="https://github.com/w4/bin">
     <style>
-        * { box-sizing: border-box; }
-        html, body { margin: 0; }
+      * { box-sizing: border-box; }
+        html, body { margin: 0; font-size: 1rem; }
         body {
             height: 100vh;
             padding: 2.5rem;
             background: #263238;
             color: #B0BEC5;
-            line-height: 1.4;
             display: flex;
             flex-direction: column;
         }
@@ -31,23 +29,68 @@
             position: absolute;
             right: 2rem;
             top: 1rem;
-            font-size: 1rem;
             gap: 1rem;
         }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+          }
+          
+          /* 2. Remove default margin */
+          * {
+            margin: 0;
+          }
+          
+          body {
+            /* 3. Add accessible line-height */
+            line-height: 1.5;
+            /* 4. Improve text rendering */
+            -webkit-font-smoothing: antialiased;
+          }
+          
+          /* 5. Improve media defaults */
+          img, picture, video, canvas, svg {
+            display: block;
+            max-width: 100%;
+          }
+          
+          /* 6. Inherit fonts for form controls */
+          input, button, textarea, select {
+            font: inherit;
+          }
+          
+          /* 7. Avoid text overflows */
+          p, h1, h2, h3, h4, h5, h6 {
+            overflow-wrap: break-word;
+          }
+          
+          /* 8. Improve line wrapping */
+          p {
+            text-wrap: pretty;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            text-wrap: balance;
+          }
+          
+          /*
+            9. Create a root stacking context
+          */
+          #root, #__next {
+            isolation: isolate;
+          }
         {% block styles %}{% endblock styles %}
     </style>
     {% block head %}{% endblock head %}
-</head>
-<body>
-
-{% block navigation %}
-<div class="navigation">
-    <a href="/">New</a>
-    <a href="/pastes">Saved Pastes</a>
-</div>
-{% endblock navigation %}
+  </head>
+  <body>
+    {% block navigation %}
+    <div class="navigation">
+      <a href="/">New</a>
+      <a href="/pastes">Saved Pastes</a>
+    </div>
+    {% endblock navigation %}
 
 {% block content %}
 {% endblock content %}
-</body>
+  </body>
 </html>

@@ -17,7 +17,6 @@
 
         color: inherit;
         font-family: inherit;
-        font-size: 1rem;
         line-height: inherit;
     }
 
@@ -42,14 +41,12 @@
 {% endblock styles %}
 
 {% block content %}
-    <form action="/" method="post">
-        <textarea name="val" placeholder="bin something" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
-
-        <button type="submit" title="&#x2318;+&#x23ce;">&#x270e;</button>
-    </form>
-
-    <script>
-        const form = document.querySelector('form');
+<form action="/" method="post">
+  <textarea name="val" placeholder="bin something" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+  <button type="submit" title="&#x2318;+&#x23ce;">&#x270e;</button>
+</form>
+<script>
+  const form = document.querySelector('form');
         const input = document.querySelector('textarea');
         const button = document.querySelector('button[type="submit"]');
         let isTouchDevice = false;
@@ -80,5 +77,5 @@
 
         window.addEventListener("beforeunload", askConfirmation);
         window.addEventListener("touchstart", () => isTouchDevice = true);
-    </script>
+</script>
 {% endblock content %}
