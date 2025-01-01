@@ -270,8 +270,17 @@ async fn show_pastes(req: HttpRequest, store: Data<Store>) -> Result<HttpRespons
     }
 
     let links: Vec<String> = result.unwrap().into_iter().map(|p| format!(
-        "<li><form action=\"/remove_paste/{}\" method=\"POST\"><a href=\"/{}.md\">{}</a><button type=\"submit\" title=\"Delete {}\">&#x274C;</button><button type=\"button\" tabIndex='-1' title=\"Edit {}\"><a href=\"/edit/{}\">✏️</a></button></form></li>", 
-        p.title, p.title, p.title, p.title, p.title, p.title)).collect();
+        "<li>
+            <form action=\"/remove_paste/{}\" method=\"POST\">
+                <a href=\"/{}.md\">{}</a>
+                <button type=\"submit\" title=\"Delete {}\">&#x274C;</button>
+                <button type=\"button\" tabIndex='-1' title=\"Edit {}\">
+                    <a href=\"/edit/{}\">✏️</a> 
+                </button>
+            </form>
+            <p>{}</p>
+        </li>", 
+        p.title, p.title, p.title, p.title, p.title, p.title, p.content.lines().next().unwrap_or(""))).collect();
 
     let html = format!(
         "<ul>{}</ul>",
