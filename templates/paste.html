@@ -12,9 +12,10 @@
     }
     code {
         counter-increment: line;
+        overflow-wrap: break-word;
+        white-space: pre-wrap;
     }
     code::before {
-        content: counter(line);
         display: inline-block;
         width: 2em; /* Fixed width */
         padding: 0 1em 0 0;
