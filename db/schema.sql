@@ -6,5 +6,8 @@ CREATE TABLE IF NOT EXISTS pastes (
     -- title of the paste note. should be unique
     title TEXT NOT NULL UNIQUE,
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
+
+ALTER TABLE pastes ADD COLUMN updated_at TEXT;

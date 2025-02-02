@@ -1,6 +1,7 @@
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::cell::RefCell;
 use sqlx::{prelude::FromRow, sqlite::SqlitePool};
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, FromRow)]
 pub struct Paste {
@@ -19,9 +20,12 @@ impl Store {
     }
 
     pub async fn insert(&self, title: &str, content: &str) -> Result<Paste, sqlx::Error> {
-        let paste = sqlx::query_as::<_, Paste>("INSERT INTO pastes (title, content) VALUES (?, ?) RETURNING *")
+        let now: DateTime<Utc> = Utc::now();
+
+        let paste = sqlx::query_as::<_, Paste>("INSERT INTO pastes (title, content, updated_at) VALUES (?, ?, ?) RETURNING *")
             .bind(title)
             .bind(content)
+            .bind(now)
             .fetch_one(&self.0)
             .await?;
         Ok(paste)
@@ -60,15 +64,18 @@ impl Store {
     }
 
     pub async fn get_all_pastes(&self) -> Result<Vec<Paste>, sqlx::Error> {
-        let pastes = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes ORDER BY created_at DESC")
+        let pastes = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes ORDER BY updated_at DESC")
             .fetch_all(&self.0)
             .await?;
         Ok(pastes)
     }
 
     pub async fn update_paste_content(&self, title: &str, content: &str) -> Result<(), sqlx::Error> {
-        sqlx::query("UPDATE pastes SET content = ? WHERE title = ?")
+        let now: DateTime<Utc> = Utc::now();
+
+        sqlx::query("UPDATE pastes SET content = ?, updated_at = ? WHERE title = ?")
             .bind(content)
+            .bind(now)
             .bind(title)
             .execute(&self.0)
             .await
