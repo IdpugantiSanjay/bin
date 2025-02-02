@@ -9,5 +9,9 @@ dev:
 release:
     cargo build --release
 
+
+restart: release
+    sudo systemctl restart bin-api.service
+
 build:
     cargo build

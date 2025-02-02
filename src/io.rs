@@ -64,7 +64,7 @@ impl Store {
     }
 
     pub async fn get_all_pastes(&self) -> Result<Vec<Paste>, sqlx::Error> {
-        let pastes = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes ORDER BY updated_at DESC")
+        let pastes = sqlx::query_as::<_, Paste>("SELECT id, title, content FROM pastes ORDER BY updated_at DESC NULLS LAST, created_at DESC")
             .fetch_all(&self.0)
             .await?;
         Ok(pastes)
