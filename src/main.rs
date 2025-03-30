@@ -263,10 +263,25 @@ async fn update_paste_content(req: HttpRequest, key: actix_web::web::Path<String
     }
 }
 
-async fn show_pastes(req: HttpRequest, store: Data<Store>) -> Result<HttpResponse, Error> {
+async fn show_pastes(req: HttpRequest, plaintext: IsPlaintextRequest, store: Data<Store>) -> Result<HttpResponse, Error> {
     let result = store.get_all_pastes().await;
     if result.is_err() {
         return Ok(HttpResponse::InternalServerError().into());
+    }
+
+    if *plaintext {
+        match result {
+            Ok(pastes) => {
+                let mut response = String::new();
+                for paste in pastes {
+                    response.push_str(&format!("{}\n", paste.title));
+                }
+                return Ok(HttpResponse::Ok()
+                    .content_type("text/plain; charset=utf-8")
+                    .body(response));
+            }
+            Err(_) => return Ok(HttpResponse::InternalServerError().into()),
+        }
     }
 
     let links: Vec<String> = result.unwrap().into_iter().map(|p| format!(
