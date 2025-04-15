@@ -24,7 +24,7 @@ use once_cell::sync::Lazy;
 use sqlx::SqlitePool;
 use core::str;
 use std::{
-    borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path
+    borrow::Cow, env, net::{IpAddr, Ipv4Addr, SocketAddr}, path::{Path, PathBuf}
 };
 use actix_web::web::{redirect, Redirect};
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
@@ -68,7 +68,7 @@ async fn main() -> std::io::Result<()> {
 
         move || {
             App::new()
-                .service(fs::Files::new("/static", Path::new("./static")).show_files_listing())
+                .service(fs::Files::new("/static", get_static_dir()).show_files_listing())
                 .app_data(Data::new(store.clone()))
                 .app_data(PayloadConfig::default().limit(args.max_paste_size))
                 .app_data(FormConfig::default().limit(args.max_paste_size))
@@ -319,6 +319,29 @@ async fn highlight_css() -> HttpResponse {
     HttpResponse::Ok()
         .content_type("text/css")
         .body(CSS.clone())
+}
+
+fn get_static_dir() -> PathBuf {
+    // Try different paths to find the static directory
+    let candidates = vec![
+        // Current directory
+        PathBuf::from("./static"),
+        // Executable directory + /static
+        env::current_exe().ok().map(|mut path| {
+            path.pop();
+            path.push("static");
+            path
+        }).unwrap_or_else(|| PathBuf::from("./static")),
+    ];
+
+    for path in candidates {
+        if path.exists() && path.is_dir() {
+            return path;
+        }
+    }
+
+    // Fallback to current directory
+    PathBuf::from("./static")
 }
 
 fn render_template<T: Template>(req: &HttpRequest, template: &T) -> Result<HttpResponse, Error> {
