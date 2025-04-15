@@ -29,6 +29,7 @@ use std::{
 use actix_web::web::{redirect, Redirect};
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
 use actix_files as fs;
+use rust_embed::RustEmbed;
 
 #[derive(argh::FromArgs, Clone)]
 /// a pastebin.
@@ -46,6 +47,10 @@ pub struct BinArgs {
     #[argh(option, default = "\"./store.db\".to_string()")]
     store_path: String,
 }
+
+#[derive(RustEmbed)]
+#[folder = "static/"]
+struct StaticFiles;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -84,6 +89,19 @@ async fn main() -> std::io::Result<()> {
                 .route("/edit/{paste}", web::get().to(edit_paste))
                 .route("/edit/{paste}", web::post().to(update_paste_content))
                 .route("/{paste}", web::head().to(HttpResponse::MethodNotAllowed))
+                .route("/fonts/yoga.woff2", web::get().to(|| async {
+                    match StaticFiles::get("fonts/yoga.woff2") {
+                        Some(content) => {
+                            HttpResponse::Ok()
+                                .content_type("font/woff2")
+                                .body(content.data.into_owned())
+                        },
+                        None => {
+                            error!("Failed to load yoga.woff2 font");
+                            HttpResponse::InternalServerError().finish()
+                        }
+                    }
+                }))
                 .default_service(web::to(|req: HttpRequest| async move {
                     error!("Couldn't find resource {}", req.uri());
                     HttpResponse::from_error(NotFound)
