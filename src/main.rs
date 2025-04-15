@@ -24,11 +24,11 @@ use once_cell::sync::Lazy;
 use sqlx::SqlitePool;
 use core::str;
 use std::{
-    borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path,
+    borrow::Cow, net::{IpAddr, Ipv4Addr, SocketAddr}, path::Path
 };
 use actix_web::web::{redirect, Redirect};
 use syntect::html::{css_for_theme_with_class_style, ClassStyle};
-// use crate::io::{delete_paste, update_paste, SerializableStore};
+use actix_files as fs;
 
 #[derive(argh::FromArgs, Clone)]
 /// a pastebin.
@@ -68,6 +68,7 @@ async fn main() -> std::io::Result<()> {
 
         move || {
             App::new()
+                .service(fs::Files::new("/static", Path::new("./static")).show_files_listing())
                 .app_data(Data::new(store.clone()))
                 .app_data(PayloadConfig::default().limit(args.max_paste_size))
                 .app_data(FormConfig::default().limit(args.max_paste_size))

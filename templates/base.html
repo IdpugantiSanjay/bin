@@ -6,6 +6,14 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗑️</text></svg>">
     <title>bin.</title>
     <style>
+      @font-face {
+        font-family: 'Yoga';
+        src: url('/static/fonts/yoga.woff2') format('woff2');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+      
       * { box-sizing: border-box; }
         html, body { margin: 0; font-size: 1rem; }
         body {
@@ -16,7 +24,7 @@
             display: flex;
             flex-direction: column;
         }
-        body, code, textarea { font-family: monospace; }
+        body, code, textarea { font-family: 'Yoga', monospace; }
         code {
           display: block;
         }
